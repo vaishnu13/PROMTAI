@@ -3,9 +3,7 @@ import { AnimatePresence } from "motion/react";
 import LoadingScreen from "../components/LoadingScreen";
 import Navbar from "../components/Navbar";
 import Hero from "../components/Hero";
-import ToonhubCarousel from "../components/ToonhubCarousel";
 
-import CinematicSection from "../components/CinematicSection";
 import ContactFooter from "../components/ContactFooter";
 
 export default function LandingPage() {
@@ -44,8 +42,6 @@ export default function LandingPage() {
       <div className={`w-full bg-bg transition-opacity duration-1000 ${isLoading ? 'h-screen overflow-hidden' : ''}`}>
         {!isLoading && <Navbar />}
         <Hero />
-        <CinematicSection />
-        <ToonhubCarousel />
         <ContactFooter />
       </div>
     </>
