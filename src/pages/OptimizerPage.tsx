@@ -3,18 +3,18 @@ import { Link } from "react-router-dom";
 import { 
   Sparkles, 
   History, 
-  LayoutTemplate, 
   Code2, 
   Settings, 
   ChevronLeft,
   Send,
   Loader2,
   Copy,
-  Download
+  Download,
+  Server
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { optimizePromptStream } from "../lib/gemini";
+import { optimizePromptStream, predictArchitectureStream } from "../lib/gemini";
 import type { OptimizationMode } from "../lib/gemini";
 
 interface PromptHistoryItem {
@@ -39,7 +39,7 @@ export default function OptimizerPage() {
   const [output, setOutput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [history, setHistory] = useState<PromptHistoryItem[]>([]);
-  const [activeTab, setActiveTab] = useState<"new" | "history" | "settings">("new");
+  const [activeTab, setActiveTab] = useState<"new" | "history" | "settings" | "architecture">("new");
 
   const outputEndRef = useRef<HTMLDivElement>(null);
 
@@ -101,6 +101,40 @@ export default function OptimizerPage() {
     }
   };
 
+  const handlePredictArchitecture = async () => {
+    if (!input.trim()) {
+      return;
+    }
+
+    setIsStreaming(true);
+    setOutput("");
+    setActiveTab("architecture");
+
+    let fullResult = "";
+
+    try {
+      await predictArchitectureStream(input, (chunk) => {
+        fullResult += chunk;
+        setOutput(fullResult);
+      });
+
+      // Save to history once complete
+      const newItem: PromptHistoryItem = {
+        id: Date.now().toString(),
+        timestamp: Date.now(),
+        mode: "Developer",
+        input: `[Architecture Predictor] ${input}`,
+        output: fullResult,
+      };
+      setHistory(prev => [newItem, ...prev]);
+
+    } catch (error: any) {
+      setOutput(`**Error:** Failed to generate architecture recommendation.\n\n${error.message || 'Check your API key and try again.'}`);
+    } finally {
+      setIsStreaming(false);
+    }
+  };
+
   const handleCopy = () => {
     navigator.clipboard.writeText(output);
     alert("Copied to clipboard!");
@@ -110,17 +144,23 @@ export default function OptimizerPage() {
     const element = document.createElement("a");
     const file = new Blob([output], {type: 'text/markdown'});
     element.href = URL.createObjectURL(file);
-    element.download = "optimized-prompt.md";
+    element.download = activeTab === "architecture" ? "architecture-recommendation.md" : "optimized-prompt.md";
     document.body.appendChild(element); // Required for this to work in FireFox
     element.click();
     document.body.removeChild(element);
   };
 
   const loadHistoryItem = (item: PromptHistoryItem) => {
-    setInput(item.input);
-    setMode(item.mode);
-    setOutput(item.output);
-    setActiveTab("new");
+    if (item.input.startsWith("[Architecture Predictor] ")) {
+      setInput(item.input.replace("[Architecture Predictor] ", ""));
+      setOutput(item.output);
+      setActiveTab("architecture");
+    } else {
+      setInput(item.input);
+      setMode(item.mode);
+      setOutput(item.output);
+      setActiveTab("new");
+    }
   };
 
   return (
@@ -155,9 +195,12 @@ export default function OptimizerPage() {
             )}
           </button>
 
-          <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-muted hover:bg-white/5 hover:text-text-primary transition-all">
-            <LayoutTemplate className="w-4 h-4" />
-            Templates
+          <button 
+            onClick={() => { setActiveTab("architecture"); setOutput(""); setInput(""); }}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === "architecture" ? "bg-white/10 text-text-primary font-medium" : "text-muted hover:bg-white/5 hover:text-text-primary"}`}
+          >
+            <Server className="w-4 h-4" />
+            AI Architecture Engine
           </button>
 
           <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-muted hover:bg-white/5 hover:text-text-primary transition-all">
@@ -187,6 +230,7 @@ export default function OptimizerPage() {
         <header className="h-16 border-b border-stroke flex items-center justify-between px-6 shrink-0 bg-transparent z-10">
           <h1 className="text-lg font-medium">
             {activeTab === "new" && "AI Prompt Optimizer"}
+            {activeTab === "architecture" && "AI Architecture Recommendation Engine"}
             {activeTab === "history" && "Prompt History"}
             {activeTab === "settings" && "Settings"}
           </h1>
@@ -283,6 +327,86 @@ export default function OptimizerPage() {
                   <Send className="w-8 h-8 mb-4 opacity-50" />
                   <p>Awaiting Input</p>
                   <p className="text-sm opacity-50 max-w-sm text-center mt-2">Enter a simple prompt above and the Gemini API will structure, enhance, and optimize it.</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 1.5 ARCHITECTURE ENGINE TAB */}
+          {activeTab === "architecture" && (
+            <div className="max-w-4xl mx-auto space-y-6">
+              
+              {/* Input Card */}
+              <div className="bg-black/20 border border-stroke rounded-2xl p-4 md:p-6 flex flex-col focus-within:border-white/20 transition-colors">
+                <label className="text-xs text-muted uppercase tracking-wider mb-4 flex items-center justify-between">
+                  Application / System Description
+                </label>
+                <textarea 
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder="e.g. Food Delivery App, E-Commerce Platform, Chat System..."
+                  className="w-full bg-transparent resize-none text-lg outline-none min-h-[120px] placeholder:text-muted/50"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && e.metaKey) {
+                      handlePredictArchitecture();
+                    }
+                  }}
+                />
+                
+                <div className="flex items-center justify-between mt-4 pt-4 border-t border-stroke/50">
+                  <span className="text-xs text-muted">Describe your app to get database, cache, queue, cost, & scaling advice</span>
+                  <button 
+                    onClick={handlePredictArchitecture}
+                    disabled={isStreaming || !input.trim()}
+                    className="bg-white text-black px-6 py-2.5 rounded-full text-sm font-medium flex items-center gap-2 hover:scale-105 transition-transform disabled:opacity-50 disabled:hover:scale-100"
+                  >
+                    {isStreaming ? (
+                      <><Loader2 className="w-4 h-4 animate-spin" /> Predicting...</>
+                    ) : (
+                      <><Sparkles className="w-4 h-4" /> Predict Architecture</>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Output / Results Area */}
+              {output && (
+                <div className="bg-black/40 border border-stroke rounded-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500 backdrop-blur-md">
+                  <div className="bg-black/20 border-b border-stroke px-6 py-3 flex items-center justify-between">
+                    <span className="text-xs text-muted uppercase tracking-wider">AI Recommended Architecture</span>
+                    
+                    {!isStreaming && (
+                      <div className="flex items-center gap-2">
+                        <button onClick={handleCopy} className="p-2 hover:bg-white/5 rounded-md text-muted hover:text-text-primary transition-colors tooltip" title="Copy">
+                          <Copy className="w-4 h-4" />
+                        </button>
+                        <button onClick={handleExport} className="p-2 hover:bg-white/5 rounded-md text-muted hover:text-text-primary transition-colors tooltip" title="Export Markdown">
+                          <Download className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="overflow-y-auto max-h-[50vh] custom-scrollbar">
+                    <div className="p-6 prose prose-invert max-w-none prose-p:leading-relaxed prose-pre:bg-black/50 prose-pre:border prose-pre:border-stroke prose-headings:font-medium prose-headings:text-white prose-a:text-blue-400">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {output}
+                      </ReactMarkdown>
+                      {isStreaming && (
+                        <span className="inline-block w-2 h-4 bg-white/80 animate-pulse ml-1 align-middle" />
+                      )}
+                      <div ref={outputEndRef} />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Empty State */}
+              {!output && !isStreaming && (
+                <div className="h-48 border border-stroke border-dashed rounded-2xl flex flex-col items-center justify-center text-muted">
+                  <Server className="w-8 h-8 mb-4 opacity-50" />
+                  <p>Awaiting Application Specs</p>
+                  <p className="text-sm opacity-50 max-w-sm text-center mt-2">Enter an app type or system description above, and the Gemini API will design the optimal database, cache, queue, cloud stack, cost sheet, and scaling blueprint.</p>
                 </div>
               )}
             </div>
